@@ -4,6 +4,7 @@ import logging
 import requests
 from typing import List, Optional
 from langchain.embeddings.base import Embeddings
+import streamlit as st
 
 # Logging setup
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ class NVIDIAEmbeddings(Embeddings):
         max_retries: int = 3,
         batch_size: int = 32,
     ):
-        self.api_key = api_key or os.getenv("NVIDIA_API_KEY")
+        self.api_key = api_key or os.getenv("NVIDIA_API_KEY",st.secrets.get("NVIDIA_API_KEY"))
         if not self.api_key:
             raise ValueError("❌ NVIDIA_API_KEY is required (via env var or init arg)")
 

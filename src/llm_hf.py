@@ -187,6 +187,7 @@ import requests
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
+import streamlit as st
 
 # Load environment variables
 load_dotenv()
@@ -211,7 +212,7 @@ class HuggingFaceLLM:
         ollama_model_name: str = "llama3"
     ):
         self.model_name = model_name or os.getenv("LLM_MODEL")
-        self.api_key = os.getenv("HUGGINGFACE_API_KEY")
+        self.api_key = os.getenv("HUGGINGFACE_API_KEY",st.secrets.get("HUGGINGFACE_API_KEY"))
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.top_p = top_p
