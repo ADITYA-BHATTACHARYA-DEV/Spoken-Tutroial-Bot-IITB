@@ -34,32 +34,32 @@ class RAGAgent:
         self.retriever = None
         self.doc_chunks: List[Document] = []
 
-    def load_checklist(self, checklist_path: Optional[str] = None) -> bool:
+def load_checklist(self, checklist_path: Optional[str] = None) -> bool:
+    try:
+        path = checklist_path or os.getenv("CHECKLIST_PDF") or st.secrets.get("CHECKLIST_PDF")
+
         st.write("📄 Path from secrets:", path)
         st.write("📂 Current working dir:", os.getcwd())
         st.write("📁 Contents of directory:", os.listdir("Data/Checklist"))
         st.write("📄 File exists:", os.path.isfile(path))
 
-        try:
-            path = checklist_path or os.getenv("CHECKLIST_PDF") or st.secrets.get("CHECKLIST_PDF")
+        if not path:
+            raise ValueError("Checklist path not specified.")
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Checklist PDF not found at: {path}")
 
-            if not path:
-                raise ValueError("Checklist path not specified.")
-            if not os.path.isfile(path):
-                raise FileNotFoundError(f"Checklist PDF not found at: {path}")
+        extractor = ChecklistRulesExtractor(path)
+        rule_docs = extractor.get_rules_as_documents()
 
+        self.vector_db = FAISS.from_documents(rule_docs, self.embedder)
+        self.retriever = self.vector_db.as_retriever(search_kwargs={"k": 5})
 
-            extractor = ChecklistRulesExtractor(path)
-            rule_docs = extractor.get_rules_as_documents()
+        logger.info(f"✅ Checklist loaded with {len(rule_docs)} rules.")
+        return True
+    except Exception as e:
+        logger.error(f"[Checklist Load Failed] {e}")
+        return False
 
-            self.vector_db = FAISS.from_documents(rule_docs, self.embedder)
-            self.retriever = self.vector_db.as_retriever(search_kwargs={"k": 5})
-
-            logger.info(f"✅ Checklist loaded with {len(rule_docs)} rules.")
-            return True
-        except Exception as e:
-            logger.error(f"[Checklist Load Failed] {e}")
-            return False
 
     def load_documents(self, docs_folder: Optional[str] = None) -> List[Document]:
         path = docs_folder or os.getenv("DOCS_FOLDER",st.secrets.get("DOCS_FOLDER"))
