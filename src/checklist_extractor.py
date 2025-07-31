@@ -6,13 +6,15 @@ from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 
+import streamlit as st
+
 load_dotenv()
 
 class ChecklistRulesExtractor:
     """Extracts structured checklist rules from a tabular-style PDF checklist."""
 
     def __init__(self, pdf_path: Optional[str] = None):
-        self.pdf_path = pdf_path or os.getenv("CHECKLIST_PDF")
+        self.pdf_path = pdf_path or os.getenv("CHECKLIST_PDF", st.secrets.get("CHECKLIST_PDF"))
         if not self.pdf_path:
             raise ValueError("Checklist PDF path not provided.")
         if not os.path.exists(self.pdf_path):

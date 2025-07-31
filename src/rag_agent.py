@@ -11,6 +11,8 @@ from src.nvidia_embeddings import NVIDIAEmbeddings as NemoRetrieverEmbeddings
 from src.llm_hf import HuggingFaceLLM
 from src.checklist_extractor import ChecklistRulesExtractor
 from src.pdf_document_loader import PDFDocumentLoader
+import streamlit as st
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -34,7 +36,7 @@ class RAGAgent:
 
     def load_checklist(self, checklist_path: Optional[str] = None) -> bool:
         try:
-            path = checklist_path or os.getenv("CHECKLIST_PDF")
+            path = checklist_path or os.getenv("CHECKLIST_PDF", st.secrets.get("CHECKLIST_PDF"))
             if not path or not os.path.exists(path):
                 raise FileNotFoundError(f"Checklist PDF not found: {path}")
 
@@ -51,7 +53,7 @@ class RAGAgent:
             return False
 
     def load_documents(self, docs_folder: Optional[str] = None) -> List[Document]:
-        path = docs_folder or os.getenv("DOCS_FOLDER")
+        path = docs_folder or os.getenv("DOCS_FOLDER",st.secrets.get("DOCS_FOLDER"))
         if not path or not os.path.isdir(path):
             logger.error(f"Document folder not found: {path}")
             return []
@@ -169,7 +171,7 @@ class RAGAgent:
 # <|assistant|>"""
 
     def process_documents(self, output_dir: Optional[str] = None) -> bool:
-        out_path = output_dir or os.getenv("OUTPUT_DIR", "./output")
+        out_path = output_dir or os.getenv("OUTPUT_DIR", "./output", st.secrets.get("OUTPUT_DIR", "./output"))
         os.makedirs(out_path, exist_ok=True)
 
         if not self.doc_chunks:

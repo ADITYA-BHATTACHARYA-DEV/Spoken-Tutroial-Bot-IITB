@@ -7,7 +7,7 @@ import os
 import logging
 from typing import List
 from pathlib import Path
-
+import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
 
-    loader = PDFDocumentLoader(os.getenv("DOCS_FOLDER", "Data/Docs"))
+    loader = PDFDocumentLoader(os.getenv("DOCS_FOLDER", "Data/Docs", st.secrets.get("DOCS_FOLDER", "Data/Docs",)))
     chunks = loader.load_and_split()
     stats = loader.get_stats(chunks)
 
