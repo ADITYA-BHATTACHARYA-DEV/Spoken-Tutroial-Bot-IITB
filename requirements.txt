@@ -10,3 +10,4 @@ markdown==3.4.4
 tqdm==4.66.1
 sentence-transformers==2.2.2
 transformers==4.36.2
+sentencepiece==0.1.99
