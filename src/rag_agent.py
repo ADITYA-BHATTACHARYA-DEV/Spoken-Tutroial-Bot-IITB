@@ -243,6 +243,23 @@ class RAGAgent:
     def load_checklist(self, checklist_path: Optional[str] = None) -> bool:
         try:
             path = checklist_path or os.getenv("CHECKLIST_PDF") or st.secrets.get("CHECKLIST_PDF")
+            print("✅ Extracted checklist rules:", self.checklist[:3])  # sanity check
+            
+            extractor = ChecklistRulesExtractor("Data/Checklist/chkList.pdf")
+
+            # ✅ Raw PDF Text Preview
+            raw_text = extractor.extract_raw_text()
+            print("📜 Raw text preview:", raw_text[:500])
+            print("📌 Character count:", len(raw_text))
+
+            # 🔎 Regex Sample Matches
+            matches = re.findall(r'\d+\.\d+\.\d+', raw_text)
+            print("🔎 Sample rule matches:", matches[:5])
+
+            # 🧠 Extracted Rules
+            self.checklist = extractor.extract_rules()
+            print("✅ Extracted checklist rules:", self.checklist[:3])
+
 
             st.write("📄 Path resolved to:", path)
             st.write("📂 Working directory:", os.getcwd())
