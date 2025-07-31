@@ -36,9 +36,13 @@ class RAGAgent:
 
     def load_checklist(self, checklist_path: Optional[str] = None) -> bool:
         try:
-            path = checklist_path or os.getenv("CHECKLIST_PDF", st.secrets.get("CHECKLIST_PDF"))
-            if not path or not os.path.exists(path):
-                raise FileNotFoundError(f"Checklist PDF not found: {path}")
+            path = checklist_path or os.getenv("CHECKLIST_PDF") or st.secrets.get("CHECKLIST_PDF")
+
+            if not path:
+                raise ValueError("Checklist path not specified.")
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f"Checklist PDF not found at: {path}")
+
 
             extractor = ChecklistRulesExtractor(path)
             rule_docs = extractor.get_rules_as_documents()
