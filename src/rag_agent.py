@@ -35,6 +35,11 @@ class RAGAgent:
         self.doc_chunks: List[Document] = []
 
     def load_checklist(self, checklist_path: Optional[str] = None) -> bool:
+        st.write("📄 Path from secrets:", path)
+        st.write("📂 Current working dir:", os.getcwd())
+        st.write("📁 Contents of directory:", os.listdir("Data/Checklist"))
+        st.write("📄 File exists:", os.path.isfile(path))
+
         try:
             path = checklist_path or os.getenv("CHECKLIST_PDF") or st.secrets.get("CHECKLIST_PDF")
 
