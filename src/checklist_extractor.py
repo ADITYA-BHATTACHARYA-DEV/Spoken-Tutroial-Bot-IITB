@@ -95,32 +95,27 @@
 #         return markdown
 
 
-
-
 import os
 import re
 from typing import List, Dict, Optional
 from pypdf import PdfReader
 import streamlit as st
 from dotenv import load_dotenv
-
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
 class ChecklistRulesExtractor:
-    """Extracts structured checklist rules from a tabular-style PDF checklist."""
+    """Extracts structured checklist rules from a multi-line PDF layout."""
 
     def __init__(self, pdf_path: Optional[str] = None):
-        # Dynamically resolve path from secrets or env
         self.pdf_path = pdf_path or st.secrets.get("CHECKLIST_PDF") or os.getenv("CHECKLIST_PDF")
 
         if not self.pdf_path:
             st.error("❌ Checklist PDF path not provided (via env or secrets).")
             raise ValueError("Checklist PDF path not provided.")
 
-        # Streamlit Cloud directory diagnostics
         st.write(f"📄 Path resolved to: `{self.pdf_path}`")
         st.write(f"📂 Working directory: `{os.getcwd()}`")
 
@@ -133,14 +128,10 @@ class ChecklistRulesExtractor:
             st.write("🔍 Available files in project:", files)
             raise FileNotFoundError(f"Checklist PDF not found at: {self.pdf_path}")
 
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len
-        )
+        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
     def extract_raw_text(self) -> str:
-        """Extract all text from the PDF file."""
+        """Extract raw text from PDF pages using pypdf."""
         try:
             with open(self.pdf_path, 'rb') as f:
                 reader = PdfReader(f)
@@ -150,7 +141,7 @@ class ChecklistRulesExtractor:
                     if page_text:
                         texts.append(page_text)
                     else:
-                        st.warning(f"🔇 No text extracted from page {i}")
+                        st.warning(f"🔇 No text on page {i}")
                 raw_text = "\n".join(texts)
                 st.write("📑 Raw text preview:", raw_text[:300])
                 return raw_text
@@ -159,40 +150,40 @@ class ChecklistRulesExtractor:
             raise RuntimeError(f"Failed to read checklist PDF: {e}")
 
     def extract_rules(self) -> Dict[str, List[str]]:
-        """Parses checklist questions and rationales grouped by category."""
+        """Parses checklist questions and rationales grouped by section headers."""
         text = self.extract_raw_text()
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
 
-        # Header format like '1.1 Preamble'
-        category_pattern = re.compile(r'(\d+\.\d+)\s+([^\n]+)')
-        categories = {match[0]: match[1].strip() for match in category_pattern.findall(text)}
+        # Extract section headers like '1.1 Preamble'
+        category_map = {}
+        for i in range(len(lines)):
+            match = re.match(r'^(\d+\.\d+)\s+(.*)', lines[i])
+            if match:
+                category_map[match.group(1)] = match.group(2).strip()
 
-        # Rule format like '1.1.1 Question\nReason'
-        rule_pattern = re.compile(
-            r'(\d+\.\d+\.\d+)\s+(.+?)\n\s*(.+?)(?=\n\d+\.\d+\.\d+|\n\d+\.\d+|\Z)', 
-            re.DOTALL
-        )
         rules_by_category: Dict[str, List[str]] = {}
+        i = 0
+        while i < len(lines):
+            if re.match(r'^\d+\.\d+\.\d+$', lines[i]):
+                rule_id = lines[i]
+                question = lines[i+1] if i+1 < len(lines) else ""
+                reason = lines[i+2] if i+2 < len(lines) else ""
+                category_key = ".".join(rule_id.split('.')[:2])
+                category_name = category_map.get(category_key, f"Section {category_key}")
+                combined = f"{rule_id} — {question}\nWhy: {reason}"
+                rules_by_category.setdefault(category_name, []).append(combined)
+                i += 3
+            else:
+                i += 1
 
-        matches = rule_pattern.findall(text)
-        st.write(f"🔎 Total rules matched: {len(matches)}")
-
-        for number, question, reason in matches:
-            category_key = ".".join(number.split('.')[:2])
-            category_name = categories.get(category_key, f"Section {category_key}")
-            cleaned_q = re.sub(r'\s+', ' ', question).strip()
-            cleaned_r = re.sub(r'\s+', ' ', reason).strip()
-            combined = f"{number} — {cleaned_q}\nWhy: {cleaned_r}"
-
-            rules_by_category.setdefault(category_name, []).append(combined)
-
+        st.write(f"🔎 Total rules parsed: {sum(len(v) for v in rules_by_category.values())}")
         st.success(f"✅ Extracted rules from {len(rules_by_category)} categories")
         return rules_by_category
 
     def get_rules_as_documents(self) -> List[Document]:
-        """Returns rules as LangChain Document objects."""
+        """Returns parsed rules as LangChain-compatible Document objects."""
         rules_by_category = self.extract_rules()
         documents = []
-
         for category, rules in rules_by_category.items():
             for rule in rules:
                 documents.append(Document(
@@ -203,18 +194,15 @@ class ChecklistRulesExtractor:
                         "rule_type": "writing_checklist"
                     }
                 ))
-
         return self.text_splitter.split_documents(documents)
 
     def get_formatted_rules(self) -> str:
-        """Returns rules formatted as markdown."""
+        """Returns all rules formatted as Markdown."""
         rules_by_category = self.extract_rules()
         markdown = ""
-
         for category, rules in rules_by_category.items():
             markdown += f"### {category}\n"
             for rule in rules:
                 markdown += f"- {rule}\n"
             markdown += "\n"
-
         return markdown
