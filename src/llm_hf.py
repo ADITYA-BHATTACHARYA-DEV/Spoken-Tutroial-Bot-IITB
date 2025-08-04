@@ -363,22 +363,22 @@ class HuggingFaceLLM:
             logger.info("📦 Returning cached output.")
             return self.cache[user_prompt]
 
-        messages: List[Dict[str, str]] = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+        # messages: List[Dict[str, str]] = [
+        #     {"role": "system", "content": system_prompt},
+        #     {"role": "user", "content": user_prompt}
+        # ]
 
         try:
-            logger.debug(f"💬 Sending messages to model {self.model_name}: {messages}")
-            response = self.client.chat_completion(
-                messages=messages,
+            logger.debug(f"💬 Sending messages to model {self.model_name}: {user_prompt}")
+            response = self.client.text_generation(
+                messages=user_prompt,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 top_p=self.top_p
-            )
-            output = response.choices[0].message.content.strip()
+            ).strip
+            # output = response.choices[0].message.content.strip()
         except Exception as e:
-            logger.exception("❌ Hugging Face chat completion failed.")
+            logger.exception("❌ Hugging Face text  generation failed.")
             output = f"❌ Error generating response from model '{self.model_name}': {e}"
 
         if self.enable_cache:
