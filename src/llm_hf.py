@@ -350,39 +350,73 @@ class HuggingFaceLLM:
         except Exception as e:
             logger.exception("❌ Failed to initialize InferenceClient.")
             raise RuntimeError("Initialization failed") from e
+        
+        def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
+            """
+    Generate response using Hugging Face text generation.
+    """
+            if not user_prompt.strip():
+                logger.warning("⚠️ Empty prompt provided.")
+                return "⚠️ No prompt provided."
 
-    def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
-        """
-        Generate response using Hugging Face chat completion.
-        """
-        if not user_prompt.strip():
-            logger.warning("⚠️ Empty prompt provided.")
-            return "⚠️ No prompt provided."
+            if self.enable_cache and user_prompt in self.cache:
+                logger.info("📦 Returning cached output.")
+                return self.cache[user_prompt]
 
-        if self.enable_cache and user_prompt in self.cache:
-            logger.info("📦 Returning cached output.")
-            return self.cache[user_prompt]
+    # Combine system and user prompt manually
+            prompt = f"{system_prompt}\n\n{user_prompt}"
 
-        # messages: List[Dict[str, str]] = [
-        #     {"role": "system", "content": system_prompt},
-        #     {"role": "user", "content": user_prompt}
-        # ]
+            try:
+                logger.debug(f"💬 Sending prompt to model {self.model_name}: {prompt}")
+                output = self.client.text_generation(
+            prompt=prompt,
+            max_new_tokens=self.max_tokens,
+            temperature=self.temperature,
+            top_p=self.top_p
+        ).strip()
+            except Exception as e:
+                logger.exception("❌ Hugging Face text generation failed.")
+                output = f"❌ Error generating response from model '{self.model_name}': {e}"
 
-        try:
-            logger.debug(f"💬 Sending messages to model {self.model_name}: {user_prompt}")
-            response = self.client.text_generation(
-                messages=user_prompt,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                top_p=self.top_p
-            ).strip
-            # output = response.choices[0].message.content.strip()
-        except Exception as e:
-            logger.exception("❌ Hugging Face text  generation failed.")
-            output = f"❌ Error generating response from model '{self.model_name}': {e}"
+            if self.enable_cache:
+                self.cache[user_prompt] = output
 
-        if self.enable_cache:
-            self.cache[user_prompt] = output
+            logger.info("✅ Response generated successfully.")
+            return output
 
-        logger.info("✅ Response generated successfully.")
-        return output
+
+    # def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
+    #     """
+    #     Generate response using Hugging Face chat completion.
+    #     """
+    #     if not user_prompt.strip():
+    #         logger.warning("⚠️ Empty prompt provided.")
+    #         return "⚠️ No prompt provided."
+
+    #     if self.enable_cache and user_prompt in self.cache:
+    #         logger.info("📦 Returning cached output.")
+    #         return self.cache[user_prompt]
+
+    #     # messages: List[Dict[str, str]] = [
+    #     #     {"role": "system", "content": system_prompt},
+    #     #     {"role": "user", "content": user_prompt}
+    #     # ]
+
+    #     try:
+    #         logger.debug(f"💬 Sending messages to model {self.model_name}: {user_prompt}")
+    #         response = self.client.text_generation(
+    #             messages=user_prompt,
+    #             max_tokens=self.max_tokens,
+    #             temperature=self.temperature,
+    #             top_p=self.top_p
+    #         ).strip
+    #         # output = response.choices[0].message.content.strip()
+    #     except Exception as e:
+    #         logger.exception("❌ Hugging Face text  generation failed.")
+    #         output = f"❌ Error generating response from model '{self.model_name}': {e}"
+
+    #     if self.enable_cache:
+    #         self.cache[user_prompt] = output
+
+    #     logger.info("✅ Response generated successfully.")
+    #     return output
