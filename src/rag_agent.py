@@ -202,10 +202,8 @@
 
 
 
-
-
-
 import os
+import re
 import logging
 from typing import List, Optional
 
@@ -224,7 +222,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 class RAGAgent:
-    """RAG Agent for rewriting documents based on checklist rules"""
+    """RAG Agent for rewriting documents based on checklist rules."""
 
     def __init__(self):
         try:
@@ -239,32 +237,11 @@ class RAGAgent:
         self.vector_db = None
         self.retriever = None
         self.doc_chunks: List[Document] = []
+        self.checklist: Optional[dict] = None
 
     def load_checklist(self, checklist_path: Optional[str] = None) -> bool:
         try:
             path = checklist_path or os.getenv("CHECKLIST_PDF") or st.secrets.get("CHECKLIST_PDF")
-            print("✅ Extracted checklist rules:", self.checklist[:3])  # sanity check
-            
-            extractor = ChecklistRulesExtractor("Data/Checklist/chkList.pdf")
-
-            # ✅ Raw PDF Text Preview
-            raw_text = extractor.extract_raw_text()
-            print("📜 Raw text preview:", raw_text[:500])
-            print("📌 Character count:", len(raw_text))
-
-            # 🔎 Regex Sample Matches
-            matches = re.findall(r'\d+\.\d+\.\d+', raw_text)
-            print("🔎 Sample rule matches:", matches[:5])
-
-            # 🧠 Extracted Rules
-            self.checklist = extractor.extract_rules()
-            print("✅ Extracted checklist rules:", self.checklist[:3])
-
-
-            st.write("📄 Path resolved to:", path)
-            st.write("📂 Working directory:", os.getcwd())
-            st.write("📁 Checklist folder contents:", os.listdir("Data/Checklist"))
-            st.write("📄 File exists:", os.path.isfile(path))
 
             if not path:
                 raise ValueError("Checklist path not specified.")
@@ -272,10 +249,27 @@ class RAGAgent:
                 raise FileNotFoundError(f"Checklist PDF not found at: {path}")
 
             extractor = ChecklistRulesExtractor(path)
-            rule_docs = extractor.get_rules_as_documents()
 
+            # ✅ Extract rules (dict[str, List[str]])
+            self.checklist = extractor.extract_rules()
+
+            # 🧠 Safe preview of first few rules
+            first_rules = []
+            for rules in self.checklist.values():
+                first_rules.extend(rules)
+                if len(first_rules) >= 3:
+                    break
+            print("✅ Extracted checklist rules:", first_rules[:3])
+
+            # 🗃 Convert to LangChain Documents
+            rule_docs = extractor.get_rules_as_documents()
             self.vector_db = FAISS.from_documents(rule_docs, self.embedder)
             self.retriever = self.vector_db.as_retriever(search_kwargs={"k": 5})
+
+            # 🧾 Diagnostic metadata
+            st.write("📄 Path resolved to:", path)
+            st.write("📂 Working directory:", os.getcwd())
+            st.write("📁 Checklist folder contents:", os.listdir(os.path.dirname(path)))
 
             logger.info(f"✅ Checklist loaded with {len(rule_docs)} rules.")
             return True
@@ -333,19 +327,19 @@ class RAGAgent:
             refine_hint = document.metadata.get("refine_hint", "Make it concise and convert to bullet format.")
 
             prompt = f"""
-                You are a professional editor rewriting technical documents based on rules.
+You are a professional editor rewriting technical documents based on rules.
 
-                Checklist Rules:
-                {checklist_rules}
+Checklist Rules:
+{checklist_rules}
 
-                Original Content:
-                {original_narration}
+Original Content:
+{original_narration}
 
-                User Request:
-                {refine_hint}
+User Request:
+{refine_hint}
 
-                Rewrite the content using clear Markdown structure with headings, bullet points, and clarity:
-            """
+Rewrite the content using clear Markdown structure with headings, bullet points, and clarity:
+"""
 
             return self.llm.generate(prompt)
         except Exception as e:

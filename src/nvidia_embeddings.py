@@ -120,3 +120,4 @@ if __name__ == "__main__":
     embeddings = NVIDIAEmbeddings()
     connected = embeddings.test_connection()
     print("✅ Connected!" if connected else "❌ Failed to connect.")
+

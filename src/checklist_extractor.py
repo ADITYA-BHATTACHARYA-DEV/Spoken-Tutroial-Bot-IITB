@@ -104,10 +104,18 @@ from dotenv import load_dotenv
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+from typing import Optional, List, Dict
+import os, re
+import streamlit as st
+from dotenv import load_dotenv
+from pypdf import PdfReader
+from langchain.docstore.document import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
 load_dotenv()
 
 class ChecklistRulesExtractor:
-    """Extracts structured checklist rules from a multi-line PDF layout."""
+    """Extracts structured checklist rules from a multi-line or merged-line PDF layout."""
 
     def __init__(self, pdf_path: Optional[str] = None):
         self.pdf_path = pdf_path or st.secrets.get("CHECKLIST_PDF") or os.getenv("CHECKLIST_PDF")
@@ -150,7 +158,7 @@ class ChecklistRulesExtractor:
             raise RuntimeError(f"Failed to read checklist PDF: {e}")
 
     def extract_rules(self) -> Dict[str, List[str]]:
-        """Parses checklist questions and rationales grouped by section headers."""
+        """Parses checklist questions and rationales grouped by section headers, with merged-line support."""
         text = self.extract_raw_text()
         lines = [line.strip() for line in text.split("\n") if line.strip()]
 
@@ -164,15 +172,21 @@ class ChecklistRulesExtractor:
         rules_by_category: Dict[str, List[str]] = {}
         i = 0
         while i < len(lines):
-            if re.match(r'^\d+\.\d+\.\d+$', lines[i]):
-                rule_id = lines[i]
-                question = lines[i+1] if i+1 < len(lines) else ""
-                reason = lines[i+2] if i+2 < len(lines) else ""
-                category_key = ".".join(rule_id.split('.')[:2])
-                category_name = category_map.get(category_key, f"Section {category_key}")
-                combined = f"{rule_id} — {question}\nWhy: {reason}"
-                rules_by_category.setdefault(category_name, []).append(combined)
-                i += 3
+            if re.match(r'^\d+\.\d+\.\d+', lines[i]):
+                rule_line = lines[i]
+                rule_id_match = re.match(r'^(\d+\.\d+\.\d+)\s+(.*)', rule_line)
+                if rule_id_match:
+                    rule_id = rule_id_match.group(1)
+                    rest = rule_id_match.group(2)
+                    # Heuristic split: look for punctuation followed by capital letter
+                    parts = re.split(r'(?<=[\?\.\:])\s+(?=[A-Z])', rest)
+                    question = parts[0] if parts else ""
+                    reason = parts[1] if len(parts) > 1 else ""
+                    category_key = ".".join(rule_id.split('.')[:2])
+                    category_name = category_map.get(category_key, f"Section {category_key}")
+                    combined = f"{rule_id} — {question}\nWhy: {reason}"
+                    rules_by_category.setdefault(category_name, []).append(combined)
+                i += 1
             else:
                 i += 1
 
@@ -206,3 +220,4 @@ class ChecklistRulesExtractor:
                 markdown += f"- {rule}\n"
             markdown += "\n"
         return markdown
+
