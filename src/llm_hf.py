@@ -303,10 +303,9 @@
 
 
 
-
 import os
 import logging
-from typing import Optional, List, Dict
+from typing import Optional
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 import streamlit as st
@@ -318,9 +317,10 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+
 class HuggingFaceLLM:
     """
-    Wrapper for Hugging Face InferenceClient without Ollama fallback.
+    Wrapper for Hugging Face InferenceClient.
     """
 
     def __init__(
@@ -350,39 +350,105 @@ class HuggingFaceLLM:
         except Exception as e:
             logger.exception("❌ Failed to initialize InferenceClient.")
             raise RuntimeError("Initialization failed") from e
+
+    def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
+        """
+        Generate response using Hugging Face text generation.
+        """
+        if not user_prompt.strip():
+            logger.warning("⚠️ Empty prompt provided.")
+            return "⚠️ No prompt provided."
+
+        if self.enable_cache and user_prompt in self.cache:
+            logger.info("📦 Returning cached output.")
+            return self.cache[user_prompt]
+
+        prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        try:
+            logger.debug(f"💬 Sending prompt to model {self.model_name}: {prompt}")
+            output = self.client.text_generation(
+                prompt=prompt,
+                max_new_tokens=self.max_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p
+            ).strip()
+        except Exception as e:
+            logger.exception("❌ Hugging Face text generation failed.")
+            output = f"❌ Error generating response from model '{self.model_name}': {e}"
+
+        if self.enable_cache:
+            self.cache[user_prompt] = output
+
+        logger.info("✅ Response generated successfully.")
+        return output
+
+
+# class HuggingFaceLLM:
+#     """
+#     Wrapper for Hugging Face InferenceClient without Ollama fallback.
+#     """
+
+#     def __init__(
+#         self,
+#         model_name: Optional[str] = None,
+#         temperature: float = 0.3,
+#         max_tokens: int = 1024,
+#         top_p: float = 0.9,
+#         enable_cache: bool = False
+#     ):
+#         self.model_name = model_name or os.getenv("LLM_MODEL")
+#         self.api_key = os.getenv("HUGGINGFACE_API_KEY", st.secrets.get("HUGGINGFACE_API_KEY"))
+#         self.temperature = temperature
+#         self.max_tokens = max_tokens
+#         self.top_p = top_p
+#         self.enable_cache = enable_cache
+#         self.cache = {}
+
+#         if not self.model_name:
+#             raise ValueError("❌ Model name not provided. Set `LLM_MODEL` in .env or pass explicitly.")
+#         if not self.api_key:
+#             raise ValueError("❌ Hugging Face API key not found. Set `HUGGINGFACE_API_KEY` in .env or secrets.")
+
+#         try:
+#             self.client = InferenceClient(model=self.model_name, token=self.api_key)
+#             logger.info(f"✅ InferenceClient initialized for model: {self.model_name}")
+#         except Exception as e:
+#             logger.exception("❌ Failed to initialize InferenceClient.")
+#             raise RuntimeError("Initialization failed") from e
         
-        def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
-            """
-    Generate response using Hugging Face text generation.
-    """
-            if not user_prompt.strip():
-                logger.warning("⚠️ Empty prompt provided.")
-                return "⚠️ No prompt provided."
+#         def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
+#             """
+#     Generate response using Hugging Face text generation.
+#     """
+#             if not user_prompt.strip():
+#                 logger.warning("⚠️ Empty prompt provided.")
+#                 return "⚠️ No prompt provided."
 
-            if self.enable_cache and user_prompt in self.cache:
-                logger.info("📦 Returning cached output.")
-                return self.cache[user_prompt]
+#             if self.enable_cache and user_prompt in self.cache:
+#                 logger.info("📦 Returning cached output.")
+#                 return self.cache[user_prompt]
 
-    # Combine system and user prompt manually
-            prompt = f"{system_prompt}\n\n{user_prompt}"
+#     # Combine system and user prompt manually
+#             prompt = f"{system_prompt}\n\n{user_prompt}"
 
-            try:
-                logger.debug(f"💬 Sending prompt to model {self.model_name}: {prompt}")
-                output = self.client.text_generation(
-            prompt=prompt,
-            max_new_tokens=self.max_tokens,
-            temperature=self.temperature,
-            top_p=self.top_p
-        ).strip()
-            except Exception as e:
-                logger.exception("❌ Hugging Face text generation failed.")
-                output = f"❌ Error generating response from model '{self.model_name}': {e}"
+#             try:
+#                 logger.debug(f"💬 Sending prompt to model {self.model_name}: {prompt}")
+#                 output = self.client.text_generation(
+#             prompt=prompt,
+#             max_new_tokens=self.max_tokens,
+#             temperature=self.temperature,
+#             top_p=self.top_p
+#         ).strip()
+#             except Exception as e:
+#                 logger.exception("❌ Hugging Face text generation failed.")
+#                 output = f"❌ Error generating response from model '{self.model_name}': {e}"
 
-            if self.enable_cache:
-                self.cache[user_prompt] = output
+#             if self.enable_cache:
+#                 self.cache[user_prompt] = output
 
-            logger.info("✅ Response generated successfully.")
-            return output
+#             logger.info("✅ Response generated successfully.")
+#             return output
 
 
     # def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
