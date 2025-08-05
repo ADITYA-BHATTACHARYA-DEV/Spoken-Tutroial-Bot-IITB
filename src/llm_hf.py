@@ -301,8 +301,6 @@
 
 
 
-
-
 import os
 import logging
 from typing import Optional
@@ -320,7 +318,7 @@ logging.basicConfig(level=logging.INFO)
 
 class HuggingFaceLLM:
     """
-    Wrapper for Hugging Face InferenceClient.
+    Wrapper for Hugging Face InferenceClient using Featherless.ai provider.
     """
 
     def __init__(
@@ -329,7 +327,8 @@ class HuggingFaceLLM:
         temperature: float = 0.3,
         max_tokens: int = 1024,
         top_p: float = 0.9,
-        enable_cache: bool = False
+        enable_cache: bool = False,
+        provider: str = "featherless-ai",  # default to featherless
     ):
         self.model_name = model_name or os.getenv("LLM_MODEL")
         self.api_key = os.getenv("HUGGINGFACE_API_KEY", st.secrets.get("HUGGINGFACE_API_KEY"))
@@ -338,6 +337,7 @@ class HuggingFaceLLM:
         self.top_p = top_p
         self.enable_cache = enable_cache
         self.cache = {}
+        self.provider = provider
 
         if not self.model_name:
             raise ValueError("❌ Model name not provided. Set `LLM_MODEL` in .env or pass explicitly.")
@@ -345,15 +345,19 @@ class HuggingFaceLLM:
             raise ValueError("❌ Hugging Face API key not found. Set `HUGGINGFACE_API_KEY` in .env or secrets.")
 
         try:
-            self.client = InferenceClient(model=self.model_name, token=self.api_key)
-            logger.info(f"✅ InferenceClient initialized for model: {self.model_name}")
+            self.client = InferenceClient(
+                model=self.model_name,
+                token=self.api_key,
+                provider=self.provider
+            )
+            logger.info(f"✅ InferenceClient initialized for model: {self.model_name} using provider: {self.provider}")
         except Exception as e:
             logger.exception("❌ Failed to initialize InferenceClient.")
             raise RuntimeError("Initialization failed") from e
 
-    def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
+    def generate(self, user_prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
         """
-        Generate response using Hugging Face text generation.
+        Generate a chat-style response using Hugging Face + Featherless chat API.
         """
         if not user_prompt.strip():
             logger.warning("⚠️ Empty prompt provided.")
@@ -363,18 +367,21 @@ class HuggingFaceLLM:
             logger.info("📦 Returning cached output.")
             return self.cache[user_prompt]
 
-        prompt = f"{system_prompt}\n\n{user_prompt}"
-
         try:
-            logger.debug(f"💬 Sending prompt to model {self.model_name}: {prompt}")
-            output = self.client.text_generation(
-                prompt=prompt,
-                max_new_tokens=self.max_tokens,
+            logger.debug(f"💬 Sending prompt to model {self.model_name}: {user_prompt}")
+            completion = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 top_p=self.top_p
-            ).strip()
+            )
+            output = completion.choices[0].message.content.strip()
         except Exception as e:
-            logger.exception("❌ Hugging Face text generation failed.")
+            logger.exception("❌ Hugging Face chat generation failed.")
             output = f"❌ Error generating response from model '{self.model_name}': {e}"
 
         if self.enable_cache:
