@@ -300,9 +300,6 @@
 #         return output
 
 
-
-
-
 import os
 import logging
 from typing import Optional
@@ -331,7 +328,7 @@ class HuggingFaceLLM:
         top_p: float = 0.9,
         enable_cache: bool = False
     ):
-        self.model_name = model_name or os.getenv("LLM_MODEL")
+        self.model_name = model_name or os.getenv("LLM_MODEL", "tiiuae/falcon-7b-instruct")
         self.api_key = os.getenv("HUGGINGFACE_API_KEY", st.secrets.get("HUGGINGFACE_API_KEY"))
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -382,6 +379,7 @@ class HuggingFaceLLM:
 
         logger.info("✅ Response generated successfully.")
         return output
+
 
 
 # class HuggingFaceLLM:
