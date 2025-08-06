@@ -300,14 +300,19 @@
 #         return output
 
 
-
-
 import os
 import logging
 from typing import Optional
 from dotenv import load_dotenv
 import streamlit as st
 import openai
+from openai.error import (
+    AuthenticationError,
+    InvalidRequestError,
+    RateLimitError,
+    APIConnectionError,
+    APIError,
+)
 import time
 
 # Load environment variables
@@ -384,17 +389,17 @@ class HuggingFaceLLM:
 
             return output
 
-        except openai.AuthenticationError:
+        except AuthenticationError:
             return "🔐 Authentication error: Invalid or expired Groq API key."
-        except openai.InvalidRequestError as e:
+        except InvalidRequestError as e:
             return f"❌ Invalid request: {e}"
-        except openai.RateLimitError:
+        except RateLimitError:
             logger.warning("⏳ Rate limit hit. Retrying after delay...")
             time.sleep(3)
             return "⏳ Rate limit exceeded: Please try again later."
-        except openai.APIConnectionError:
+        except APIConnectionError:
             return "📡 Network error: Unable to reach Groq API."
-        except openai.APIError as e:
+        except APIError as e:
             return f"💥 Server error: {e}"
         except Exception as e:
             logger.exception("❌ Unexpected error during text generation.")
