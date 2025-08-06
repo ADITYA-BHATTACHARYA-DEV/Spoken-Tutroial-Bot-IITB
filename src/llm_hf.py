@@ -302,18 +302,18 @@
 
 import os
 import logging
+import time
 from typing import Optional
 from dotenv import load_dotenv
 import streamlit as st
-import openai
-from openai.error import (
+from openai import OpenAI
+from openai._exceptions import (
     AuthenticationError,
     InvalidRequestError,
     RateLimitError,
     APIConnectionError,
-    APIError,
+    APIStatusError,
 )
-import time
 
 # Load environment variables
 load_dotenv()
@@ -336,7 +336,6 @@ class HuggingFaceLLM:
         top_p: float = 0.9,
         enable_cache: bool = False
     ):
-        # Load config
         self.model_name = model_name or os.getenv("LLM_MODEL", st.secrets.get("LLM_MODEL", "llama3-8b-8192"))
         self.api_key = os.getenv("GROQ_API_KEY", st.secrets.get("GROQ_API_KEY"))
         self.temperature = temperature
@@ -350,15 +349,17 @@ class HuggingFaceLLM:
         if not self.api_key:
             raise ValueError("❌ GROQ_API_KEY not found. Set `GROQ_API_KEY` in .env or secrets.")
 
-        # Set OpenAI client to Groq endpoint
-        openai.api_key = self.api_key
-        openai.base_url = "https://api.groq.com/openai/v1"
+        # Initialize Groq (OpenAI-compatible) client
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.groq.com/openai/v1",
+        )
 
         logger.info(f"✅ Groq client initialized with model: {self.model_name}")
 
     def generate(self, user_prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
         """
-        Generate response using Groq's API with OpenAI-compatible ChatCompletion.
+        Generate response using Groq's API via OpenAI-compatible interface.
         """
         if not user_prompt.strip():
             return "⚠️ No prompt provided."
@@ -373,7 +374,7 @@ class HuggingFaceLLM:
 
         try:
             logger.info(f"📤 Sending request to Groq model: {self.model_name}")
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 temperature=self.temperature,
@@ -399,7 +400,7 @@ class HuggingFaceLLM:
             return "⏳ Rate limit exceeded: Please try again later."
         except APIConnectionError:
             return "📡 Network error: Unable to reach Groq API."
-        except APIError as e:
+        except APIStatusError as e:
             return f"💥 Server error: {e}"
         except Exception as e:
             logger.exception("❌ Unexpected error during text generation.")
