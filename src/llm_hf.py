@@ -317,7 +317,7 @@ logging.basicConfig(level=logging.INFO)
 
 class HuggingFaceLLM:
     """
-    Wrapper for Hugging Face InferenceClient.
+    Wrapper for Hugging Face InferenceClient with improved error handling.
     """
 
     def __init__(
@@ -328,7 +328,8 @@ class HuggingFaceLLM:
         top_p: float = 0.9,
         enable_cache: bool = False
     ):
-        self.model_name = model_name or os.getenv("LLM_MODEL", "tiiuae/falcon-7b-instruct")
+        # Default to Mistral if no model specified
+        self.model_name = model_name or os.getenv("LLM_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
         self.api_key = os.getenv("HUGGINGFACE_API_KEY", st.secrets.get("HUGGINGFACE_API_KEY"))
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -343,14 +344,20 @@ class HuggingFaceLLM:
 
         try:
             self.client = InferenceClient(model=self.model_name, token=self.api_key)
-            logger.info(f"✅ InferenceClient initialized for model: {self.model_name}")
+            # Test connection with a small request
+            test_response = self.client.text_generation("Hello", max_new_tokens=1)
+            logger.info(f"✅ Successfully connected to model: {self.model_name}")
         except Exception as e:
+            if "404" in str(e):
+                error_msg = f"Model {self.model_name} not found on Hugging Face inference API. Try 'mistralai/Mistral-7B-Instruct-v0.1' or another supported model."
+                logger.error(error_msg)
+                raise ValueError(error_msg) from e
             logger.exception("❌ Failed to initialize InferenceClient.")
-            raise RuntimeError("Initialization failed") from e
+            raise RuntimeError(f"Initialization failed: {str(e)}") from e
 
-    def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
+    def generate(self, user_prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
         """
-        Generate response using Hugging Face text generation.
+        Generate response using Hugging Face text generation with improved error handling.
         """
         if not user_prompt.strip():
             logger.warning("⚠️ Empty prompt provided.")
@@ -360,26 +367,27 @@ class HuggingFaceLLM:
             logger.info("📦 Returning cached output.")
             return self.cache[user_prompt]
 
-        prompt = f"{system_prompt}\n\n{user_prompt}"
+        prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
 
         try:
-            logger.debug(f"💬 Sending prompt to model {self.model_name}: {prompt}")
+            logger.debug(f"💬 Sending prompt to model {self.model_name}: {prompt[:100]}...")
             output = self.client.text_generation(
                 prompt=prompt,
                 max_new_tokens=self.max_tokens,
                 temperature=self.temperature,
-                top_p=self.top_p
+                top_p=self.top_p,
+                do_sample=True
             ).strip()
+            
+            logger.info("✅ Response generated successfully.")
+            if self.enable_cache:
+                self.cache[user_prompt] = output
+            return output
+            
         except Exception as e:
-            logger.exception("❌ Hugging Face text generation failed.")
-            output = f"❌ Error generating response from model '{self.model_name}': {e}"
-
-        if self.enable_cache:
-            self.cache[user_prompt] = output
-
-        logger.info("✅ Response generated successfully.")
-        return output
-
+            error_msg = f"❌ Error generating response: {str(e)}"
+            logger.exception(error_msg)
+            return error_msg
 
 
 # class HuggingFaceLLM:
