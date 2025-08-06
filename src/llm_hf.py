@@ -306,9 +306,9 @@ import os
 import logging
 from typing import Optional
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
 import streamlit as st
-import requests
+import openai
+import time
 
 # Load environment variables
 load_dotenv()
@@ -320,7 +320,7 @@ logging.basicConfig(level=logging.INFO)
 
 class HuggingFaceLLM:
     """
-    Wrapper for Hugging Face InferenceClient with extended error diagnostics.
+    Wrapper for Groq's OpenAI-compatible API, keeping naming consistent with HuggingFaceLLM.
     """
 
     def __init__(
@@ -331,9 +331,9 @@ class HuggingFaceLLM:
         top_p: float = 0.9,
         enable_cache: bool = False
     ):
-        # Model and API Key from env or Streamlit secrets
-        self.model_name = model_name or os.getenv("LLM_MODEL", st.secrets.get("LLM_MODEL"))
-        self.api_key = os.getenv("HUGGINGFACE_API_KEY", st.secrets.get("HUGGINGFACE_API_KEY"))
+        # Load config
+        self.model_name = model_name or os.getenv("LLM_MODEL", st.secrets.get("LLM_MODEL", "llama3-8b-8192"))
+        self.api_key = os.getenv("GROQ_API_KEY", st.secrets.get("GROQ_API_KEY"))
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.top_p = top_p
@@ -343,18 +343,17 @@ class HuggingFaceLLM:
         if not self.model_name:
             raise ValueError("❌ Model name not provided. Set `LLM_MODEL` in .env or secrets.")
         if not self.api_key:
-            raise ValueError("❌ Hugging Face API key not found. Set `HUGGINGFACE_API_KEY` in .env or secrets.")
+            raise ValueError("❌ GROQ_API_KEY not found. Set `GROQ_API_KEY` in .env or secrets.")
 
-        try:
-            self.client = InferenceClient(model=self.model_name, token=self.api_key)
-            logger.info(f"✅ InferenceClient initialized for model: {self.model_name}")
-        except Exception as e:
-            logger.exception("❌ Failed to initialize InferenceClient.")
-            raise RuntimeError("Initialization failed") from e
+        # Set OpenAI client to Groq endpoint
+        openai.api_key = self.api_key
+        openai.base_url = "https://api.groq.com/openai/v1"
+
+        logger.info(f"✅ Groq client initialized with model: {self.model_name}")
 
     def generate(self, user_prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
         """
-        Generate response with detailed error handling.
+        Generate response using Groq's API with OpenAI-compatible ChatCompletion.
         """
         if not user_prompt.strip():
             return "⚠️ No prompt provided."
@@ -362,41 +361,45 @@ class HuggingFaceLLM:
         if self.enable_cache and user_prompt in self.cache:
             return self.cache[user_prompt]
 
-        prompt = f"{system_prompt}\n\n{user_prompt}"
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
 
         try:
-            output = self.client.text_generation(
-                prompt=prompt,
-                max_new_tokens=self.max_tokens,
+            logger.info(f"📤 Sending request to Groq model: {self.model_name}")
+            response = openai.ChatCompletion.create(
+                model=self.model_name,
+                messages=messages,
                 temperature=self.temperature,
-                top_p=self.top_p,
-                do_sample=True
-            ).strip()
+                max_tokens=self.max_tokens,
+                top_p=self.top_p
+            )
+            output = response.choices[0].message.content.strip()
+
+            logger.info("✅ Response received successfully.")
+
             if self.enable_cache:
                 self.cache[user_prompt] = output
+
             return output
 
-        except requests.exceptions.HTTPError as http_err:
-            status_code = http_err.response.status_code
-            if status_code == 401:
-                return "🔐 Unauthorized: Check if your Hugging Face API token is correct or expired."
-            elif status_code == 403:
-                return f"🚫 Forbidden: Your API key doesn't have access to the model `{self.model_name}`. Check if it's gated or private."
-            elif status_code == 404:
-                return f"❌ Model not found: `{self.model_name}` is unavailable or does not exist on Hugging Face Hub."
-            elif status_code == 429:
-                return "⏳ Rate limit exceeded: You have hit the Hugging Face usage quota. Try again later."
-            elif status_code in [500, 502, 503, 504]:
-                return f"💥 Server Error ({status_code}): Hugging Face API might be temporarily down. Try again later."
-            else:
-                return f"❌ HTTP Error {status_code}: {http_err.response.reason}"
-
-        except requests.exceptions.ConnectionError:
-            return "📡 Network error: Unable to reach Hugging Face API. Check your internet or firewall."
-
+        except openai.AuthenticationError:
+            return "🔐 Authentication error: Invalid or expired Groq API key."
+        except openai.InvalidRequestError as e:
+            return f"❌ Invalid request: {e}"
+        except openai.RateLimitError:
+            logger.warning("⏳ Rate limit hit. Retrying after delay...")
+            time.sleep(3)
+            return "⏳ Rate limit exceeded: Please try again later."
+        except openai.APIConnectionError:
+            return "📡 Network error: Unable to reach Groq API."
+        except openai.APIError as e:
+            return f"💥 Server error: {e}"
         except Exception as e:
             logger.exception("❌ Unexpected error during text generation.")
             return f"❌ Unexpected error: {str(e)}"
+
 
 
 # class HuggingFaceLLM:
