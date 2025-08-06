@@ -298,14 +298,14 @@
 
 #         logger.info("✅ Response generated successfully.")
 #         return output
-
 import os
 import logging
+import time
 from typing import Optional
+
 from dotenv import load_dotenv
 import streamlit as st
-import openai
-import time
+from openai import OpenAI, OpenAIError
 
 # Load environment variables
 load_dotenv()
@@ -317,7 +317,8 @@ logging.basicConfig(level=logging.INFO)
 
 class HuggingFaceLLM:
     """
-    Wrapper for Groq's OpenAI-compatible API, keeping naming consistent with HuggingFaceLLM.
+    Wrapper for Groq's OpenAI-compatible API using the new `openai` v1.x client.
+    Keeps naming consistent with HuggingFaceLLM.
     """
 
     def __init__(
@@ -341,9 +342,11 @@ class HuggingFaceLLM:
         if not self.api_key:
             raise ValueError("❌ GROQ_API_KEY not found. Set `GROQ_API_KEY` in .env or secrets.")
 
-        # Configure OpenAI client to use Groq's endpoint
-        openai.api_key = self.api_key
-        openai.base_url = "https://api.groq.com/openai/v1"
+        # Initialize OpenAI client for Groq
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
 
         logger.info(f"✅ Groq client initialized with model: {self.model_name}")
 
@@ -361,7 +364,7 @@ class HuggingFaceLLM:
 
         try:
             logger.info(f"📤 Sending request to Groq model: {self.model_name}")
-            response = openai.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 temperature=self.temperature,
@@ -369,7 +372,6 @@ class HuggingFaceLLM:
                 top_p=self.top_p
             )
             output = response.choices[0].message.content.strip()
-
             logger.info("✅ Response received successfully.")
 
             if self.enable_cache:
@@ -377,12 +379,13 @@ class HuggingFaceLLM:
 
             return output
 
-        except openai.OpenAIError as e:
+        except OpenAIError as e:
             logger.error(f"❌ OpenAIError: {e}")
             return f"❌ Error: {str(e)}"
         except Exception as e:
             logger.exception("❌ Unexpected error during text generation.")
             return f"❌ Unexpected error: {str(e)}"
+
 
 
 
