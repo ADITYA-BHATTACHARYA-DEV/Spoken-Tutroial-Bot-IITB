@@ -299,7 +299,6 @@
 #         logger.info("✅ Response generated successfully.")
 #         return output
 
-
 import os
 import logging
 from typing import Optional
@@ -317,7 +316,7 @@ logging.basicConfig(level=logging.INFO)
 
 class HuggingFaceLLM:
     """
-    Wrapper for Hugging Face InferenceClient with improved error handling.
+    Wrapper for Hugging Face InferenceClient with guaranteed-available model.
     """
 
     def __init__(
@@ -328,8 +327,8 @@ class HuggingFaceLLM:
         top_p: float = 0.9,
         enable_cache: bool = False
     ):
-        # Default to Mistral if no model specified
-        self.model_name = model_name or os.getenv("LLM_MODEL", "mistralai/Mistral-7B-Instruct-v0.1")
+        # Default to a model that's definitely available
+        self.model_name = model_name or os.getenv("LLM_MODEL", "google/flan-t5-xxl")
         self.api_key = os.getenv("HUGGINGFACE_API_KEY", st.secrets.get("HUGGINGFACE_API_KEY"))
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -348,16 +347,22 @@ class HuggingFaceLLM:
             test_response = self.client.text_generation("Hello", max_new_tokens=1)
             logger.info(f"✅ Successfully connected to model: {self.model_name}")
         except Exception as e:
-            if "404" in str(e):
-                error_msg = f"Model {self.model_name} not found on Hugging Face inference API. Try 'mistralai/Mistral-7B-Instruct-v0.1' or another supported model."
-                logger.error(error_msg)
-                raise ValueError(error_msg) from e
             logger.exception("❌ Failed to initialize InferenceClient.")
-            raise RuntimeError(f"Initialization failed: {str(e)}") from e
+            available_models = [
+                "google/flan-t5-xxl",
+                "gpt2",
+                "facebook/opt-1.3b",
+                "bigscience/bloom-560m"
+            ]
+            error_msg = (
+                f"Failed to connect to model {self.model_name}. "
+                f"Try one of these guaranteed-available models instead: {', '.join(available_models)}"
+            )
+            raise ValueError(error_msg) from e
 
     def generate(self, user_prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
         """
-        Generate response using Hugging Face text generation with improved error handling.
+        Generate response using Hugging Face text generation.
         """
         if not user_prompt.strip():
             logger.warning("⚠️ Empty prompt provided.")
@@ -388,7 +393,6 @@ class HuggingFaceLLM:
             error_msg = f"❌ Error generating response: {str(e)}"
             logger.exception(error_msg)
             return error_msg
-
 
 # class HuggingFaceLLM:
 #     """
