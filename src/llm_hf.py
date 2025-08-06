@@ -302,13 +302,13 @@
 
 
 
-
 import os
 import logging
 from typing import Optional
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 import streamlit as st
+import requests
 
 # Load environment variables
 load_dotenv()
@@ -320,7 +320,7 @@ logging.basicConfig(level=logging.INFO)
 
 class HuggingFaceLLM:
     """
-    Wrapper for Hugging Face InferenceClient.
+    Wrapper for Hugging Face InferenceClient with extended error diagnostics.
     """
 
     def __init__(
@@ -331,7 +331,8 @@ class HuggingFaceLLM:
         top_p: float = 0.9,
         enable_cache: bool = False
     ):
-        self.model_name = model_name or os.getenv("LLM_MODEL")
+        # Model and API Key from env or Streamlit secrets
+        self.model_name = model_name or os.getenv("LLM_MODEL", st.secrets.get("LLM_MODEL"))
         self.api_key = os.getenv("HUGGINGFACE_API_KEY", st.secrets.get("HUGGINGFACE_API_KEY"))
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -340,7 +341,7 @@ class HuggingFaceLLM:
         self.cache = {}
 
         if not self.model_name:
-            raise ValueError("❌ Model name not provided. Set `LLM_MODEL` in .env or pass explicitly.")
+            raise ValueError("❌ Model name not provided. Set `LLM_MODEL` in .env or secrets.")
         if not self.api_key:
             raise ValueError("❌ Hugging Face API key not found. Set `HUGGINGFACE_API_KEY` in .env or secrets.")
 
@@ -351,37 +352,51 @@ class HuggingFaceLLM:
             logger.exception("❌ Failed to initialize InferenceClient.")
             raise RuntimeError("Initialization failed") from e
 
-    def generate(self, user_prompt: str, system_prompt: str = "You are a helpful writing assistant.") -> str:
+    def generate(self, user_prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
         """
-        Generate response using Hugging Face text generation.
+        Generate response with detailed error handling.
         """
         if not user_prompt.strip():
-            logger.warning("⚠️ Empty prompt provided.")
             return "⚠️ No prompt provided."
 
         if self.enable_cache and user_prompt in self.cache:
-            logger.info("📦 Returning cached output.")
             return self.cache[user_prompt]
 
         prompt = f"{system_prompt}\n\n{user_prompt}"
 
         try:
-            logger.debug(f"💬 Sending prompt to model {self.model_name}: {prompt}")
             output = self.client.text_generation(
                 prompt=prompt,
                 max_new_tokens=self.max_tokens,
                 temperature=self.temperature,
-                top_p=self.top_p
+                top_p=self.top_p,
+                do_sample=True
             ).strip()
+            if self.enable_cache:
+                self.cache[user_prompt] = output
+            return output
+
+        except requests.exceptions.HTTPError as http_err:
+            status_code = http_err.response.status_code
+            if status_code == 401:
+                return "🔐 Unauthorized: Check if your Hugging Face API token is correct or expired."
+            elif status_code == 403:
+                return f"🚫 Forbidden: Your API key doesn't have access to the model `{self.model_name}`. Check if it's gated or private."
+            elif status_code == 404:
+                return f"❌ Model not found: `{self.model_name}` is unavailable or does not exist on Hugging Face Hub."
+            elif status_code == 429:
+                return "⏳ Rate limit exceeded: You have hit the Hugging Face usage quota. Try again later."
+            elif status_code in [500, 502, 503, 504]:
+                return f"💥 Server Error ({status_code}): Hugging Face API might be temporarily down. Try again later."
+            else:
+                return f"❌ HTTP Error {status_code}: {http_err.response.reason}"
+
+        except requests.exceptions.ConnectionError:
+            return "📡 Network error: Unable to reach Hugging Face API. Check your internet or firewall."
+
         except Exception as e:
-            logger.exception("❌ Hugging Face text generation failed.")
-            output = f"❌ Error generating response from model '{self.model_name}': {e}"
-
-        if self.enable_cache:
-            self.cache[user_prompt] = output
-
-        logger.info("✅ Response generated successfully.")
-        return output
+            logger.exception("❌ Unexpected error during text generation.")
+            return f"❌ Unexpected error: {str(e)}"
 
 
 # class HuggingFaceLLM:
