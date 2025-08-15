@@ -200,12 +200,10 @@
 
 
 
-
-
 import os
 import re
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from langchain.schema import Document
 from langchain_community.vectorstores import FAISS
@@ -242,31 +240,16 @@ class RAGAgent:
     def load_checklist(self, checklist_path: Optional[str] = None) -> bool:
         try:
             path = checklist_path or os.getenv("CHECKLIST_PDF") or st.secrets.get("CHECKLIST_PDF")
-
-            if not path:
-                raise ValueError("Checklist path not specified.")
-            if not os.path.isfile(path):
+            if not path or not os.path.isfile(path):
                 raise FileNotFoundError(f"Checklist PDF not found at: {path}")
 
             extractor = ChecklistRulesExtractor(path)
-
-            # ✅ Extract rules (dict[str, List[str]])
             self.checklist = extractor.extract_rules()
 
-            # 🧠 Safe preview of first few rules
-            first_rules = []
-            for rules in self.checklist.values():
-                first_rules.extend(rules)
-                if len(first_rules) >= 3:
-                    break
-            print("✅ Extracted checklist rules:", first_rules[:3])
-
-            # 🗃 Convert to LangChain Documents
             rule_docs = extractor.get_rules_as_documents()
             self.vector_db = FAISS.from_documents(rule_docs, self.embedder)
             self.retriever = self.vector_db.as_retriever(search_kwargs={"k": 5})
 
-            # 🧾 Diagnostic metadata
             st.write("📄 Path resolved to:", path)
             st.write("📂 Working directory:", os.getcwd())
             st.write("📁 Checklist folder contents:", os.listdir(os.path.dirname(path)))
@@ -298,9 +281,6 @@ class RAGAgent:
                 raise ValueError("No documents provided for indexing.")
 
             sample_embedding = self.embedder.embed_query("sample test")
-            if not sample_embedding:
-                raise RuntimeError("Embedding failed during index creation.")
-
             dim = len(sample_embedding)
             faiss_index = faiss.IndexFlatIP(dim)
 
@@ -321,30 +301,88 @@ class RAGAgent:
                 raise ValueError("Retriever not initialized.")
 
             top_rules = self.retriever.get_relevant_documents(document.page_content[:1000])
-            checklist_rules = "\n".join(f"- {doc.page_content}" for doc in top_rules)
+            checklist_rules = "\n".join(f"- {doc.page_content.strip()}" for doc in top_rules)
 
             original_narration = document.page_content.strip()
-            refine_hint = document.metadata.get("refine_hint", "Make it concise and convert to bullet format.")
+            refine_hint = document.metadata.get("refine_hint", "Convert to human-friendly narration with visual cues.")
+
+            # ✂️ Segment narration into logical chunks
+            segments = re.split(r"\n{2,}", original_narration)
+            segmented_narration = "\n".join(
+                f"Slide {i+1}:\n{seg.strip()}" for i, seg in enumerate(segments) if seg.strip()
+            )
 
             prompt = f"""
-You are a professional editor rewriting technical documents based on rules.
+You are a professional editor rewriting technical tutorials for spoken narration. Your task is to convert the original content into a slide-by-slide format suitable for voice-over delivery.
 
-Checklist Rules:
+Use the following checklist rules to guide your rewrite:
 {checklist_rules}
 
-Original Content:
-{original_narration}
+Original Content (Segmented by Slide):
+{segmented_narration}
 
 User Request:
 {refine_hint}
 
-Rewrite the content using clear Markdown structure with headings, bullet points, and clarity:
+🔧 Rewrite Instructions:
+- Format the output as a table with two columns: **Visual Cue** and **Narration**
+- Each row should represent a slide or visual moment in the tutorial
+- In the **Visual Cue** column, describe the most important visual or interaction on that slide (e.g. “Cursor on the interface”, “Hover around the dotted box”, “Press numpad 0”)
+- In the **Narration** column, write clear, natural language suitable for spoken delivery
+- Use bullet points only when listing items
+- Ensure technical accuracy and clarity
+- Keep the tone warm, instructive, and easy to follow
+
+🎯 Output Format Example:
+
+Visual Cue | Narration
+-----------|----------
+Title Slide | Welcome to this spoken tutorial on Camera view settings in Blender.
+Learning Objectives | In this tutorial, we will learn to: • Change the location of the camera • Roll, pan, dolly and track the camera view • Select a new camera view using fly mode
+Cursor on the interface | I have already opened Blender. Let us see how to navigate the camera. Hover the cursor on User Perspective at the top left corner of the 3D viewport.
+Press numpad 0 | To switch to the camera view, go to View > Camera > Active Camera. You can also press numpad 0 as a shortcut.
+Hover around the dotted box | We can now see the camera view. The dotted box around the cube is the field of view of the Active camera. All objects inside this box will be rendered.
+
+Now, rewrite the content accordingly:
 """
 
-            return self.llm.generate(prompt)
+            rewritten_output = self.llm.generate(prompt)
+
+            if not rewritten_output.strip().startswith("Visual Cue | Narration"):
+                logger.warning("[Output Format Warning] Response may not be a valid Markdown table.")
+
+            return rewritten_output
         except Exception as e:
             logger.error(f"[Rewrite Failed] {e}")
             return f"⚠️ Error generating content: {e}"
+
+    def parse_markdown_table(self, md_text: str) -> List[Dict[str, str]]:
+        rows = []
+        lines = md_text.strip().split("\n")
+        for line in lines[2:]:  # Skip header and separator
+            if "|" in line:
+                parts = [cell.strip() for cell in line.split("|")]
+                if len(parts) >= 2:
+                    rows.append({
+                        "visual_cue": parts[0],
+                        "narration": parts[1]
+                    })
+        return rows
+    
+
+    def parse_markdown_table(self, md_text: str) -> List[Dict[str, str]]:
+        rows = []
+        lines = md_text.strip().split("\n")
+        for line in lines[2:]:  # Skip header and separator
+            if "|" in line:
+                parts = [cell.strip() for cell in line.split("|")]
+                if len(parts) >= 2:
+                    rows.append({
+                    "Visual Cue": parts[0],
+                    "Narration": parts[1]
+                })
+        return rows
+
 
     def process_documents(self, output_dir: Optional[str] = None) -> bool:
         out_path = output_dir or os.getenv("OUTPUT_DIR") or st.secrets.get("OUTPUT_DIR") or "./output"
