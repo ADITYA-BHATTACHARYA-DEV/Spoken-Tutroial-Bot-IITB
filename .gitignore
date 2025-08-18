@@ -1,5 +1,8 @@
 venv/
 ".env" 
 ".streamlit/secrets.toml" 
+<<<<<<< HEAD
 ".env" 
 ".streamlit/secrets.toml" 
+=======
+>>>>>>> 142d53e5c6d71fb3b9ec987bbc0aff5556b29d70

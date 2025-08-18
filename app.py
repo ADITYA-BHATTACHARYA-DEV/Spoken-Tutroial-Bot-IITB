@@ -351,10 +351,28 @@ def escape_latex(text: str) -> str:
         '^': r'\textasciicircum{}'
     }
     return ''.join(replacements.get(char, char) for char in text)
+import re
 
 def clean_line(line: str) -> str:
-    line = re.sub(r'<br\s*/?>', '', line, flags=re.IGNORECASE)
+    """
+    Cleans narration text for safe use in ReportLab Paragraph.
+    
+    - Replaces <br> tags with newline characters
+    - Removes <para> tags
+    - Strips leading/trailing whitespace
+    """
+    # Replace all <br>, <br/>, <BR>, etc. with newline
+    line = re.sub(r'<br\s*/?>', '\n', line, flags=re.IGNORECASE)
+
+    # Remove <para> and </para> tags
+    line = re.sub(r'</?para>', '', line, flags=re.IGNORECASE)
+
+    # Strip leading/trailing whitespace
     return line.strip()
+
+
+
+
 
 def convert_text_to_beamer_slides(content: str) -> str:
     beamer_template = [
@@ -489,48 +507,76 @@ def compile_latex_to_pdf(tex_path: str) -> str:
 
 
 
-def parse_rewritten_text_to_script(content: str) -> List[Dict[str, str]]:
-    script = []
-
-    # Markdown table format
-    if "Visual Cue | Narration" in content and "|" in content:
-        lines = content.strip().split("\n")
-        for line in lines[2:]:  # Skip header and separator
-            if "|" in line:
-                parts = [cell.strip() for cell in line.split("|")]
-                if len(parts) >= 2:
-                    script.append({
-                        "Visual Cue": parts[0],
-                        "Narration": parts[1]
-                    })
-        return script
-
-    # Heading-based fallback
-    current_heading = None
-    current_body = []
-    for line in content.split('\n'):
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            if current_heading and current_body:
-                script.append({
-                    "Visual Cue": current_heading,
-                    "Narration": "\n".join(current_body).strip()
-                })
-                current_body = []
-            current_heading = stripped.lstrip("#").strip()
-        elif stripped:
-            current_body.append(stripped)
-
-    if current_heading and current_body:
-        script.append({
-            "Visual Cue": current_heading,
-            "Narration": "\n".join(current_body).strip()
-        })
-
-    return script
+from typing import List, Dict
+from typing import List, Dict
+import re
 
 from typing import List, Dict
+import re
 
+import re
+from typing import List, Dict
+
+def parse_rewritten_text_to_script(content: str) -> List[Dict[str, str]]:
+    """
+    Parses a markdown-style table containing 'Visual Cue | Narration' rows,
+    supporting multiline narration and bullet formatting.
+    """
+    script = []
+    lines = content.strip().split("\n")
+
+    # Locate start of table
+    start_index = None
+    for i, line in enumerate(lines):
+        if re.search(r"visual\s*cue\s*\|\s*narration", line, re.IGNORECASE):
+            start_index = i + 2  # Skip header and separator
+            break
+    if start_index is None:
+        return script  # No table found
+
+    i = start_index
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Skip empty lines
+        if not line:
+            i += 1
+            continue
+
+        # Detect start of a new row
+        if "|" in line:
+            parts = [cell.strip() for cell in line.split("|", maxsplit=1)]
+            if len(parts) != 2:
+                i += 1
+                continue
+
+            visual_cue = parts[0]
+            narration_lines = [parts[1]]
+
+            # Collect subsequent lines that belong to narration
+            i += 1
+            while i < len(lines):
+                next_line = lines[i].strip()
+                if next_line and "|" not in next_line and not re.match(r"^\s*visual cue", next_line, re.IGNORECASE):
+                    narration_lines.append(next_line)
+                    i += 1
+                else:
+                    break
+
+            # Final cleanup
+            narration = "\n".join(narration_lines).strip()
+
+            # Defensive: strip leading bullets from visual cue
+            visual_cue = re.sub(r"^\s*[•*-]\s*", "", visual_cue).strip()
+
+            script.append({
+                "Visual Cue": visual_cue,
+                "Narration": narration
+            })
+        else:
+            i += 1
+
+    return script
 
 
 
@@ -601,20 +647,159 @@ from reportlab.lib import colors
 import re
 
 
+import re
+from io import BytesIO
+from typing import List, Dict
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import LETTER
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+import streamlit as st
+
+import re
+
+
+
+import re
+from io import BytesIO
+from typing import List, Dict
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import LETTER
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+import re
+from io import BytesIO
+from typing import List, Dict
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import LETTER
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+import re
+from io import BytesIO
+from typing import List, Dict
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import LETTER
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+# 🔍 Cue classification
+def is_visual_cue(line: str) -> bool:
+    line = line.strip()
+    if "[narration]" in line.lower():
+        return False
+    return bool(re.match(r"^\s*\[(image|code|gui):", line, re.IGNORECASE)) or "(screenshot" in line.lower()
+import re
+from typing import List, Dict
+from io import BytesIO
+from reportlab.lib.pagesizes import LETTER
+from reportlab.lib import colors
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+import re
+from reportlab.platypus import Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+
+import re
+from reportlab.platypus import Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
 
 def clean_markdown(text: str) -> str:
-    lines = text.splitlines()
-    cleaned = []
-    for line in lines:
-        line = re.sub(r"^\s*#+\s*", "", line)              # Remove headers
-        line = re.sub(r"^\s*[-*|]\s*", "• ", line)          # Bullets or pipes to •
-        line = re.sub(r"[*_`~|]", "", line)                 # Strip markdown symbols
-        line = line.strip()
-        if line:
-            cleaned.append(line)
-    return "<br/>".join(cleaned)
+    """
+    Cleans narration text for ReportLab rendering.
+    - Converts bullets to en dash
+    - Inserts <br/> before each bullet or sentence
+    - Strips markdown symbols
+    """
+    # Normalize bullets
+    text = re.sub(r"[-*•]\s*", "– ", text)
 
+    # Split by bullet or sentence boundary
+    segments = re.split(r"(–\s+[^–]+)", text)
+
+    cleaned = []
+    for segment in segments:
+        segment = segment.strip()
+        if not segment:
+            continue
+        segment = re.sub(r"[*_`~|]", "", segment)
+        segment = re.sub(r"</?para>", "", segment, flags=re.IGNORECASE)
+        cleaned.append(f"<br/>{segment}")
+
+    return "".join(cleaned)
+
+
+def render_narration_top_aligned(canvas, narration_text: str, x: float, top_y: float, max_width: float):
+    """
+    Renders narration aligned with visual cue top.
+    - Calculates paragraph height
+    - Draws paragraph starting from top_y downward
+    """
+    cleaned_narration = clean_markdown(narration_text)
+
+    style = getSampleStyleSheet()["Normal"]
+    style.leading = 14
+    style.fontSize = 11
+
+    para = Paragraph(cleaned_narration, style)
+
+    # Measure height
+    width, height = para.wrap(max_width, 1000)
+
+    # Draw from top_y downward
+    para.drawOn(canvas, x, top_y - height)
+
+    # Optional: debug bounding box
+    # canvas.rect(x, top_y - height, width, height, stroke=1, fill=0)
+
+
+# 🧠 Determine if a line is a visual cue
+def is_visual_cue(line: str) -> bool:
+    """
+    Determines if a line qualifies as a visual cue.
+    Heuristics may include slide titles, image references, or layout hints.
+    """
+    return bool(re.match(r"^(Slide|Image|Layout|Title|Diagram|Chart|Figure)\b", line, re.IGNORECASE))
+
+# 🧠 Split raw block into visual cue and narration
+def split_block(block: str) -> Dict[str, str]:
+    """
+    Separates a raw markdown block into visual cue and narration components.
+    """
+    visual_lines = []
+    narration_lines = []
+
+    for line in block.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if is_visual_cue(line):
+            visual_lines.append(line)
+        else:
+            narration_lines.append(line)
+
+    return {
+        "Visual Cue": " ".join(visual_lines),
+        "Narration": "\n".join(narration_lines)
+    }
+
+# 🖨️ PDF generation from narration script
 def convert_script_to_pdf(script: List[Dict[str, str]]) -> BytesIO:
+    """
+    Converts a slide-by-slide narration script into a styled PDF.
+    Each slide includes a visual cue and cleaned narration block.
+    """
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -631,7 +816,7 @@ def convert_script_to_pdf(script: List[Dict[str, str]]) -> BytesIO:
         name="CueStyle",
         parent=styles["Normal"],
         fontSize=10,
-        leading=14,
+        leading=12,
         textColor=colors.darkblue,
         spaceAfter=6
     )
@@ -640,19 +825,27 @@ def convert_script_to_pdf(script: List[Dict[str, str]]) -> BytesIO:
         name="NarrationStyle",
         parent=styles["Normal"],
         fontSize=10,
-        leading=14,
+        leading=12,
         spaceAfter=6
     )
 
-    elements = [Paragraph("🎞️ Slide-by-Slide Narration Script", styles["Title"]), Spacer(1, 20)]
+    elements = [
+        Paragraph("🎞️ Slide-by-Slide Narration Script", styles["Title"]),
+        Spacer(1, 20)
+    ]
+
     table_data = [["Visual Cue", "Narration"]]
 
     for i, block in enumerate(script):
-        cue_raw = block.get("Visual Cue") or block.get("visual_cue", "")
-        narration_raw = block.get("Narration") or block.get("narration", "")
+        # If block contains raw markdown, split it
+        if "raw" in block:
+            block = split_block(block["raw"])
 
-        cue_heading = f"<b>Slide {i+1} Title:</b> {cue_raw}"
-        narration_cleaned = clean_markdown(narration_raw)
+        cue_text = block.get("Visual Cue", "")
+        narration_text = block.get("Narration", "")
+
+        cue_heading = f"<b>Slide {i+1} Title:</b> {cue_text}"
+        narration_cleaned = clean_markdown(narration_text)
 
         cue_paragraph = Paragraph(cue_heading, cue_style)
         narration_paragraph = Paragraph(narration_cleaned, narration_style)
@@ -679,8 +872,11 @@ def convert_script_to_pdf(script: List[Dict[str, str]]) -> BytesIO:
     buffer.seek(0)
     return buffer
 
+
+
+# Streamlit page config
 st.set_page_config(
-    page_title="Spoken Tutorial-IIT Bombay",
+    page_title="Spoken Tutorial - IIT Bombay",
     layout="wide",
     page_icon="🧠"
 )
@@ -815,6 +1011,11 @@ Return narration with clean formatting, no markdown symbols, and bullet clarity.
                     st.session_state.tutorial_script = parse_rewritten_text_to_script(regenerated_output)
                     st.session_state.timestamped_script = generate_timestamps_for_blocks(st.session_state.tutorial_script)
                     st.session_state.edited_script = parse_rewritten_text_to_script(regenerated_output)
+
+
+
+
+
 
                     with st.expander("🐞 Debug Snapshot"):
                         st.json({

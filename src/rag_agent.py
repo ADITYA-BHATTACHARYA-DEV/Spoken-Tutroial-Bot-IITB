@@ -313,7 +313,9 @@ class RAGAgent:
             )
 
             prompt = f"""
-You are a professional editor rewriting technical tutorials for spoken narration. Your task is to convert the original content into a slide-by-slide format suitable for voice-over delivery.
+You are a professional editor rewriting technical tutorials for spoken narration.
+Your task is to convert the original content into a slide-by-slide format suitable
+for voice-over delivery.
 
 Use the following checklist rules to guide your rewrite:
 {checklist_rules}
@@ -325,26 +327,78 @@ User Request:
 {refine_hint}
 
 🔧 Rewrite Instructions:
-- Format the output as a table with two columns: **Visual Cue** and **Narration**
-- Each row should represent a slide or visual moment in the tutorial
-- In the **Visual Cue** column, describe the most important visual or interaction on that slide (e.g. “Cursor on the interface”, “Hover around the dotted box”, “Press numpad 0”)
-- In the **Narration** column, write clear, natural language suitable for spoken delivery
-- Use bullet points only when listing items
-- Ensure technical accuracy and clarity
-- Keep the tone warm, instructive, and easy to follow
+
+- Format the output as a Markdown table with two columns: **Visual Cue** and **Narration**
+- Each row must represent a distinct slide or visual moment in the tutorial
+
+📌 Visual Cue Guidelines:
+• Do not use bullet points in this column
+• Describe the key visual, interaction, or code snippet in one or two concise sentences
+• If code is present, include it as-is or summarize it clearly
+• For long code blocks, summarize structure and use sub-bullets in the Narration column only
+
+🗣️ Narration Guidelines:
+• Use formal, instructional language suitable for academic tutorials
+• Maintain a tutorial-style tone appropriate for academic learners
+• Avoid casual expressions or conversational tone
+• Use phrases such as:
+  • “Let us now”
+  • “Observe that”
+  • “To do this”
+  • “You should”
+• Narration may exceed 80 characters
+• If a sentence exceeds 80 characters, break it into sub-bullets
+• Each bullet or sub-bullet must:
+  • Begin with “•”
+  • Appear on a new line
+  • Be placed only in the Narration column
+• Do not use inline separators such as <br>, commas, or semicolons for bullet formatting
+• Maintain technical accuracy and completeness
+• Avoid unexplained jargon
+• Ensure clarity and consistency throughout
+
+📄 Formatting Enforcement:
+• Ensure the Markdown table is syntactically valid
+• Do not merge Visual Cue and Narration content into one column
+• Do not use multiline cells in the Visual Cue column
+• Bullet points must be rendered as separate lines in the Narration column only
 
 🎯 Output Format Example:
 
 Visual Cue | Narration
 -----------|----------
-Title Slide | Welcome to this spoken tutorial on Camera view settings in Blender.
-Learning Objectives | In this tutorial, we will learn to: • Change the location of the camera • Roll, pan, dolly and track the camera view • Select a new camera view using fly mode
-Cursor on the interface | I have already opened Blender. Let us see how to navigate the camera. Hover the cursor on User Perspective at the top left corner of the 3D viewport.
-Press numpad 0 | To switch to the camera view, go to View > Camera > Active Camera. You can also press numpad 0 as a shortcut.
-Hover around the dotted box | We can now see the camera view. The dotted box around the cube is the field of view of the Active camera. All objects inside this box will be rendered.
+Title Slide | Welcome to this tutorial on camera view settings in Blender.
+Learning Objectives | In this tutorial, we will learn to:
+                   • Move the camera
+                   • Use fly mode
+                   • Adjust views
+Cursor on the interface | Blender is open. Let us locate the camera controls.
+Press numpad 0 | To switch to camera view:
+               • Press numpad 0
+               • Or go to View > Camera > Active Camera
+Code: hist(movies$runtime, ...) | This command creates a histogram of runtimes.
+Highlight hist arguments | We have used the following arguments:
+                         • main for title
+                         • xlab for x-axis label
+                         • xlim to set range
+                         • col to set color
+Code: <dl> with multiple <dt> and <dd> tags | This code defines a description list.
+Sub-bullets: | • Dry fruits: Cashew, Almond, Apricot, Dates, Fig
+             • Fresh fruits: Orange, Mango, Apple, Grapes, Melon, Banana, Cherry,
+               Blueberry, Apricot, Pineapple, Dragon Fruit, Avocados, Kiwi, Pear,
+               Pomegranate, Plum, Papaya
+Highlight <dt> and <dd> usage | <dt> is used for category titles.
+                              • <dd> lists the items under each category.
+Instructional Note | To practise this, you should know basic HTML and CSS.
+                   • If not, review the tutorials linked in the resource section.
 
 Now, rewrite the content accordingly:
 """
+
+
+
+
+
 
             rewritten_output = self.llm.generate(prompt)
 
